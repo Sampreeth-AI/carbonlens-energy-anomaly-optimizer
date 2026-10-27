@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: carematch-ai-resolver
+    name: carbonlens-energy-optimizer
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -10,4 +10,4 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: DATABASE_URL
-        value: sqlite:///carematch.db
+        value: sqlite:///carbonlens.db

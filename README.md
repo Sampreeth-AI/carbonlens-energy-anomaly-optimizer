@@ -1,21 +1,16 @@
-# Duplicate Patient Analyzer — AI Record Resolver
+# CarbonLens — Energy Anomaly & Carbon Footprint Optimizer
 
-A portfolio-ready Flask application that identifies likely duplicate patient records across fragmented healthcare data. It combines fuzzy demographic matching (RapidFuzz), semantic similarity (Azure OpenAI embeddings when configured), and transparent explanations for human review.
+A polished Flask dashboard that detects unusual building or household energy consumption with **Isolation Forest**, quantifies estimated carbon exposure, and creates a plain-English sustainability brief. It is designed as a portfolio project showing practical Python, Pandas, scikit-learn, Flask, and optional Azure OpenAI integration.
 
-> Demo only. This project uses synthetic data and is not a clinical system. Do not upload protected health information to an unapproved environment.
+## What it does
 
-## Highlights
+- Analyses smart-meter CSV data using Isolation Forest across consumption, hour, and weekday features.
+- Flags operational outliers and estimates excess kWh and avoidable CO2e.
+- Produces an executive-ready sustainability update using Azure OpenAI when configured, with a robust local fallback.
+- Includes a polished 14-day synthetic smart-meter demo, so the app works immediately after deployment.
+- Provides Render Blueprint configuration plus a health endpoint.
 
-- Clean, responsive analyst dashboard for importing records and reviewing matches
-- CSV workflow powered by Pandas; accepts inconsistent name, DOB, phone, email and address formatting
-- Manual patient-entry form for a quick duplicate-detection demo
-- Weighted confidence model: name, DOB, contact details, and semantic record similarity
-- Azure OpenAI embeddings supported with a dependency-free local n-gram cosine fallback
-- Synthea-style synthetic demo records included—no real patient information
-- MySQL-ready SQLAlchemy models; SQLite runs locally without setup
-- Render deployment blueprint and API health endpoint
-
-## Quick start
+## Run locally
 
 ```powershell
 python -m venv .venv
@@ -25,50 +20,31 @@ Copy-Item .env.example .env
 python run.py
 ```
 
-Open `http://127.0.0.1:5000`, choose **Load Synthea-style demo**, then **Run duplicate detection**.
+Open `http://127.0.0.1:5000`, then select **Run live demo**.
 
 ## CSV format
 
-`first_name` and `last_name` are required. The remaining fields are optional:
+The energy column must be named `consumption_kwh`, `energy_kwh`, `kwh`, or `consumption`. Include `timestamp` (recommended); without it the app will construct an hourly timeline.
 
 ```csv
-external_id,first_name,last_name,date_of_birth,gender,phone,email,address,source
-MRN-104,Aisha,Khan,1988-04-16,Female,555-0101,aisha@example.test,18 Oak Lane,Hospital A
-LEG-22,Aisha,Khan,16/04/1988,F,5550101,aishakhan@example.test,18 Oak Ln.,Legacy EHR
+timestamp,consumption_kwh
+2026-10-01 00:00:00,0.87
+2026-10-01 01:00:00,0.82
+2026-10-01 18:00:00,1.74
 ```
 
-## Azure OpenAI setup (optional)
+## Azure OpenAI (optional)
 
-Set `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`, and `AZURE_OPENAI_CHAT_DEPLOYMENT` in `.env`. The deployment names must match deployments in your Azure resource. Azure produces both semantic similarity and concise reviewer explanations; without it, CareMatch uses a local character n-gram similarity and deterministic explanation so the demo remains runnable.
-
-## MySQL
-
-Create a database and set:
-
-```env
-DATABASE_URL=mysql+pymysql://USER:PASSWORD@localhost:3306/carematch
-```
-
-## API
-
-| Method | Route | Purpose |
-|---|---|---|
-| GET | `/api/v1/health` | Render health check |
-| GET | `/api/v1/dashboard` | Dashboard counters |
-| POST | `/api/v1/patients/upload` | Upload CSV using `file` form data |
-| POST | `/api/v1/demo-data` | Load synthetic demo records |
-| POST | `/api/v1/resolve` | Calculate duplicate candidates |
-| GET | `/api/v1/matches` | Get ranked matches and explanations |
+Set `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, and `AZURE_OPENAI_CHAT_DEPLOYMENT` in `.env` or Render environment variables. No key is required for the dashboard or local narrative generator.
 
 ## Deploy to Render
 
-1. Push this project to a new GitHub repository.
-2. In Render select **New → Blueprint** and connect that repository (it detects `render.yaml`).
-3. Add `AZURE_OPENAI_*` secrets in the Render dashboard if using Azure embeddings.
-4. For persistent production data, replace SQLite with a managed MySQL `DATABASE_URL`; free Render filesystems are ephemeral.
+1. Push this repository to GitHub.
+2. In Render select **New → Blueprint**, connect the repo, and select `render.yaml`.
+3. Optionally add the Azure OpenAI variables in the Render dashboard.
 
-## Test
+The SQLite database is ephemeral on Render's free filesystem; the app's analysis dashboard remains fully usable without persistence.
 
-```powershell
-python -m unittest discover -s tests
-```
+## Technical note
+
+The default 0.233 kg CO2e/kWh factor is a demonstration value. Use the verified grid factor and reporting boundary required by your organisation before making regulated disclosures.

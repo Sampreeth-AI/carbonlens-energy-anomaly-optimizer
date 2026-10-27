@@ -1,96 +1,43 @@
 import io
-from datetime import datetime
-
 import pandas as pd
 from flask import Blueprint, jsonify, request
-
 from app import db
-from app.models import DuplicateMatch, Patient
-from app.services.matching import find_matches
+from app.models import EnergyRun
+from app.services.energy import analyze, demo_dataset, sustainability_report
 
 api = Blueprint("api", __name__)
-REQUIRED = {"first_name", "last_name"}
 
 
 @api.get("/health")
-def health():
-    return {"status": "ok", "service": "carematch-ai"}
+def health(): return {"status": "ok", "service": "carbonlens-energy-optimizer"}
 
 
-@api.get("/dashboard")
-def dashboard():
-    return jsonify({"patients": Patient.query.count(), "matches": DuplicateMatch.query.count(),
-                    "high_confidence": DuplicateMatch.query.filter_by(decision="High confidence").count()})
+@api.get("/latest")
+def latest():
+    run = EnergyRun.query.order_by(EnergyRun.id.desc()).first()
+    return jsonify(run.to_dict() if run else None)
 
 
-@api.get("/matches")
-def matches():
-    return jsonify([match.to_dict() for match in DuplicateMatch.query.order_by(DuplicateMatch.confidence.desc()).all()])
+def run_analysis(frame, source):
+    data, anomalies, summary = analyze(frame)
+    report = sustainability_report(anomalies, summary)
+    run = EnergyRun(source_name=source, report=report, **summary)
+    db.session.add(run); db.session.commit()
+    points = [{"timestamp": row.timestamp.strftime("%d %b %H:%M"), "consumption": round(row.consumption_kwh, 2), "anomaly": bool(row.is_anomaly)} for row in data.tail(96).itertuples()]
+    events = [{"timestamp": row.timestamp.strftime("%d %b %Y · %H:%M"), "consumption": round(row.consumption_kwh, 2), "excess": round(row.excess_kwh, 2), "score": round(row.anomaly_score, 3)} for row in anomalies.head(8).itertuples()]
+    return jsonify({"run": run.to_dict(), "points": points, "events": events})
 
 
-@api.post("/patients")
-def add_patient():
-    """Add a single patient from the dashboard before running the resolver."""
-    data = request.get_json(silent=True) or {}
-    if not str(data.get("first_name", "")).strip() or not str(data.get("last_name", "")).strip():
-        return jsonify({"error": "First name and last name are required."}), 400
-    allowed = {"external_id", "first_name", "last_name", "date_of_birth", "gender", "phone", "email", "address"}
-    patient = Patient(**{key: str(data.get(key, "")).strip() or None for key in allowed}, source="Manual entry")
-    db.session.add(patient)
-    db.session.commit()
-    return jsonify(patient.to_dict()), 201
+@api.post("/demo")
+def demo(): return run_analysis(demo_dataset(), "14-day smart-meter demo")
 
 
-@api.post("/patients/upload")
-def upload_patients():
+@api.post("/analyze")
+def upload():
     file = request.files.get("file")
-    if not file or not file.filename.lower().endswith(".csv"):
-        return jsonify({"error": "Upload a CSV file."}), 400
+    if not file or not file.filename.lower().endswith(".csv"): return jsonify({"error": "Please upload a CSV file."}), 400
     try:
-        frame = pd.read_csv(io.BytesIO(file.read())).fillna("")
-    except Exception:
-        return jsonify({"error": "The file could not be read as CSV."}), 400
-    frame.columns = [str(column).strip().lower().replace(" ", "_") for column in frame.columns]
-    if not REQUIRED.issubset(frame.columns):
-        return jsonify({"error": "CSV requires first_name and last_name columns."}), 400
-    allowed = {"external_id", "first_name", "last_name", "date_of_birth", "gender", "phone", "email", "address"}
-    patients = [Patient(**{key: str(row.get(key, "")).strip() or None for key in allowed}, source=str(row.get("source", "CSV upload")).strip() or "CSV upload") for row in frame.to_dict("records")]
-    db.session.add_all(patients)
-    db.session.commit()
-    return jsonify({"imported": len(patients)})
-
-
-@api.post("/demo-data")
-def demo_data():
-    samples = [
-        ("SYN-1001", "Aisha", "Khan", "1988-04-16", "Female", "555-0101", "aisha.khan@example.test", "18 Oak Lane", "Synthea demo"),
-        ("EXT-883", "Aisha", "Khan", "16/04/1988", "F", "5550101", "aishakhan@example.test", "18 Oak Ln.", "Legacy EHR"),
-        ("SYN-1002", "Daniel", "Rodriguez", "1975-11-02", "Male", "555-0102", "daniel.r@example.test", "421 North Street", "Synthea demo"),
-        ("EXT-120", "Danial", "Rodriguez", "11/02/1975", "M", "555 0102", "daniel.r@example.test", "421 N Street", "Claims system"),
-        ("SYN-1003", "Meera", "Shah", "1992-08-20", "Female", "555-0103", "meera.shah@example.test", "9 Lake View", "Synthea demo"),
-        ("SYN-1004", "Oliver", "Wilson", "1984-01-05", "Male", "555-0104", "oliver.w@example.test", "77 Pine Road", "Synthea demo"),
-    ]
-    db.session.add_all([Patient(external_id=a, first_name=b, last_name=c, date_of_birth=d, gender=e, phone=f, email=g, address=h, source=i) for a,b,c,d,e,f,g,h,i in samples])
-    db.session.commit()
-    return jsonify({"imported": len(samples)})
-
-
-@api.post("/resolve")
-def resolve():
-    threshold = float((request.get_json(silent=True) or {}).get("threshold", 70))
-    threshold = min(max(threshold, 0), 100)
-    DuplicateMatch.query.delete()
-    patients = [patient.to_dict() for patient in Patient.query.all()]
-    matches = find_matches(patients, threshold)
-    for left, right, score in matches:
-        db.session.add(DuplicateMatch(patient_a_id=left["id"], patient_b_id=right["id"], **score))
-    db.session.commit()
-    return jsonify({"evaluated": len(patients), "matches": len(matches), "threshold": threshold})
-
-
-@api.delete("/reset")
-def reset():
-    DuplicateMatch.query.delete()
-    Patient.query.delete()
-    db.session.commit()
-    return "", 204
+        frame = pd.read_csv(io.BytesIO(file.read()))
+        return run_analysis(frame, file.filename)
+    except ValueError as error: return jsonify({"error": str(error)}), 400
+    except Exception: return jsonify({"error": "The file could not be processed as an energy CSV."}), 400

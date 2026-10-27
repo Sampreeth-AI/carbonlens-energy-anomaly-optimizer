@@ -1,56 +1,19 @@
-from datetime import datetime, timezone
-
+"""Database models for saved energy analyses."""
+from datetime import datetime
 from app import db
 
 
-class Patient(db.Model):
-    __tablename__ = "patients"
-
+class EnergyRun(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    external_id = db.Column(db.String(100), nullable=True, index=True)
-    first_name = db.Column(db.String(120), nullable=False, index=True)
-    last_name = db.Column(db.String(120), nullable=False, index=True)
-    date_of_birth = db.Column(db.String(32), nullable=True, index=True)
-    gender = db.Column(db.String(32), nullable=True)
-    phone = db.Column(db.String(64), nullable=True)
-    email = db.Column(db.String(255), nullable=True)
-    address = db.Column(db.String(500), nullable=True)
-    source = db.Column(db.String(100), nullable=False, default="upload")
-    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-
-    @property
-    def full_name(self):
-        return f"{self.first_name} {self.last_name}".strip()
+    source_name = db.Column(db.String(160), nullable=False, default="Demo smart-meter dataset")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    total_rows = db.Column(db.Integer, nullable=False)
+    anomaly_count = db.Column(db.Integer, nullable=False)
+    baseline_kwh = db.Column(db.Float, nullable=False)
+    total_kwh = db.Column(db.Float, nullable=False)
+    carbon_kg = db.Column(db.Float, nullable=False)
+    avoidable_carbon_kg = db.Column(db.Float, nullable=False)
+    report = db.Column(db.Text, nullable=False)
 
     def to_dict(self):
-        return {"id": self.id, "external_id": self.external_id, "name": self.full_name,
-                "first_name": self.first_name, "last_name": self.last_name,
-                "date_of_birth": self.date_of_birth, "gender": self.gender,
-                "phone": self.phone, "email": self.email, "address": self.address,
-                "source": self.source}
-
-
-class DuplicateMatch(db.Model):
-    __tablename__ = "duplicate_matches"
-
-    id = db.Column(db.Integer, primary_key=True)
-    patient_a_id = db.Column(db.Integer, db.ForeignKey("patients.id"), nullable=False)
-    patient_b_id = db.Column(db.Integer, db.ForeignKey("patients.id"), nullable=False)
-    confidence = db.Column(db.Float, nullable=False)
-    name_score = db.Column(db.Float, nullable=False)
-    dob_score = db.Column(db.Float, nullable=False)
-    contact_score = db.Column(db.Float, nullable=False)
-    embedding_score = db.Column(db.Float, nullable=False)
-    decision = db.Column(db.String(32), nullable=False, default="Review")
-    explanation = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-
-    patient_a = db.relationship("Patient", foreign_keys=[patient_a_id])
-    patient_b = db.relationship("Patient", foreign_keys=[patient_b_id])
-
-    def to_dict(self):
-        return {"id": self.id, "patient_a": self.patient_a.to_dict(), "patient_b": self.patient_b.to_dict(),
-                "confidence": round(self.confidence, 1), "name_score": round(self.name_score, 1),
-                "dob_score": round(self.dob_score, 1), "contact_score": round(self.contact_score, 1),
-                "embedding_score": round(self.embedding_score, 1), "decision": self.decision,
-                "explanation": self.explanation}
+        return {"id": self.id, "source_name": self.source_name, "created_at": self.created_at.strftime("%d %b %Y · %H:%M"), "total_rows": self.total_rows, "anomaly_count": self.anomaly_count, "baseline_kwh": round(self.baseline_kwh, 2), "total_kwh": round(self.total_kwh, 2), "carbon_kg": round(self.carbon_kg, 2), "avoidable_carbon_kg": round(self.avoidable_carbon_kg, 2), "report": self.report}
